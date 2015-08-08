@@ -201,9 +201,6 @@ function _init_graph() {
             configure: {
                 container: $('.jlv_settings')[0]
             },
-            edges: {
-                arrows: 'to'
-            },
             layout: {
                 hierarchical: {
                     sortMethod: 'directed'
@@ -242,10 +239,10 @@ function add_ticket(ticket_id) {
                         data.fields.status.name,
                         data.fields.issuelinks.map(function(link) {
                             if (link.outwardIssue) {
-                                return {from: ticket_id, to:link.outwardIssue.key};
+                                return {from: ticket_id, to:link.outwardIssue.key, type: link.type.name};
                             }
                             if (link.inwardIssue) {
-                                return {from: link.inwardIssue.key, to:ticket_id};
+                                return {from: link.inwardIssue.key, to:ticket_id, type: link.type.name};
                             }
                             console.log('Unkown link type!', link);
                         }).filter(function(link) {
@@ -277,14 +274,28 @@ function add_ticket_info(ticket_id, summary, type, status, links) {
     links.forEach(function(link) {
         add_ticket(link['from']);
         add_ticket(link['to']);
-        var link_id = link['from']+'::'+link['to'];
+        
+        var link_id = link['from']+'::'+link['to']+'::'+link['type'];
         if (edges.get(link_id) === null) {
-            edges.add({
-                id: link_id,
-                from: link['from'],
-                to: link['to']
-            });
-        };
+            // Show edges differently
+            if (link['type'] == 'Blocks') {
+                edges.add({
+                    id: link_id,
+                    from: link['from'],
+                    to: link['to'],
+                    arrows: 'to'
+                });
+            } else if (link['type'] == 'Relates') {
+                edges.add({
+                    id: link_id,
+                    from: link['from'],
+                    to: link['to'],
+                    dashes: true
+                });
+            }else {
+                console.log('Ignored link', link);
+            }
+        }
     });
 }
 
