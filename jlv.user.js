@@ -20,6 +20,7 @@ TODO:
   * Don't leave unconnected components far away
   * Add re-layout button
 * Add hyperlinks to tickets
+* Ticket summary panel on click
 * Show summary
   * Number of tickets in each status
 * Stop AJAX requests when JLV is closed
@@ -33,6 +34,11 @@ TODO:
 * Edit mode
   * Drag to add new links
   * Remove existing links
+* JLV links on agile board view
+  * Mini view on hover?
+* JLV link at sprint level?
+* Persist ticket information until page reload
+
 DONE:
 * Show ticket & related tickets in a graph
 * Add JLV button to epics
@@ -40,6 +46,7 @@ DONE:
 * Show summary - Number of tickets
 * Show VisJS config options
 * Check links don't exist already before adding them
+* Fit the view when adding nodes/edges so everything is onscreen
 */
 
 
@@ -211,8 +218,32 @@ function _init_graph() {
     
     // Add change listeners
     nodes.on('*', function (event, properties, senderId) {
+        // UPdate the node summary
         $('.jlv_summary').text(nodes.length+' issues');
+        
+        // Wait a bit then fit the view to the nodes
+        delayed_fit();
     });
+    
+    // DEBUG
+    networkXXX = network;
+}
+
+var fit_timeout;
+function delayed_fit() {
+    if (fit_timeout !== undefined) {
+        clearTimeout(fit_timeout);
+    }
+    
+    fit_timeout = setTimeout(function() {
+        // Fit the view to the network
+        network.fit({
+            animation: {
+                duration: 1000,
+                easingFunction: 'easeInOutQuad'
+            }
+        });
+    }, 50);
 }
 
 function add_ticket(ticket_id) {
