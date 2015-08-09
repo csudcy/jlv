@@ -14,8 +14,8 @@
 
 /*
 TODO:
+* Show JLV button after re-render (e.g. after editing links)
 * Improve layout:
-  * Work out why it's not always strictly hierarchical
   * See if there'a a way to layout without crossing lines
   * Don't leave unconnected components far away
   * Add re-layout button
@@ -27,6 +27,7 @@ TODO:
 * Group into epic rows
 * Group into Sprint columns
 * Filtering:
+  * Allow filtering by project
   * Allow filtering by epic
   * Allow filtering by sprint
   * Allow filtering by name
@@ -37,7 +38,7 @@ TODO:
 * JLV links on agile board view
   * Mini view on hover?
 * JLV link at sprint level?
-* Persist ticket information until page reload
+* Persist ticket information until page reload?
 
 DONE:
 * Show ticket & related tickets in a graph
@@ -47,6 +48,7 @@ DONE:
 * Show VisJS config options
 * Check links don't exist already before adding them
 * Fit the view when adding nodes/edges so everything is onscreen
+* Improve layout -  Work out why it's not always strictly hierarchical - Bad data (cycles!)
 */
 
 
@@ -98,7 +100,7 @@ GM_addStyle([
         'font-weight: bold;',
         'font-size: 2.0em;',
     '}',
-    
+
     '.jlv_summary {',
         'position: absolute;',
         'bottom: 0px;',
@@ -108,14 +110,14 @@ GM_addStyle([
 
     '.jlv_close {',
         'position: absolute;',
-        'top: 0px;',
-        'right: 0px;',
+        'top: 5px;',
+        'right: 5px;',
     '}',
-    
+
     '.jlv_toggle_settings {',
         'position: absolute;',
-        'top: 40px;',
-        'right: 0px;',
+        'top: 45px;',
+        'right: 5px;',
     '}',
 ''].join('\n'));
 
@@ -180,16 +182,17 @@ function _add_jlv(jlv_type) {
     .append(
         $('<div class="jlv_settings"></span>')
     )
+    // Add close button
+    .append(
+        $('<span class="jlv_close jlv_button">Close</span>')
+            .click(close_jlv)
+    )
     // Add settings toggle
     .append(
         $('<span class="jlv_toggle_settings jlv_button">Settings</span>')
             .click(toggle_settings)
     )
-    // Add the close button
-    .append(
-        $('<span class="jlv_close jlv_button">Close</span>')
-            .click(close_jlv)
-    );
+    ;
 }
 
 function _init_graph() {
@@ -224,9 +227,6 @@ function _init_graph() {
         // Wait a bit then fit the view to the nodes
         delayed_fit();
     });
-    
-    // DEBUG
-    networkXXX = network;
 }
 
 var fit_timeout;
