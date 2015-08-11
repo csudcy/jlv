@@ -229,13 +229,17 @@ function _init_graph() {
     });
 }
 
-var fit_timeout;
+var most_recent_fit_identifier;
 function delayed_fit() {
-    if (fit_timeout !== undefined) {
-        clearTimeout(fit_timeout);
-    }
-    
-    fit_timeout = setTimeout(function() {
+    // It seems setTimeout in GM doesn't return a reference to it
+    // So we can't just use clearTimeout to cancel the previous ones
+    // Therefore, let then fire but only do anything if they're the most recent one set
+    var fit_identifier = Math.floor(Math.random() * 999999);
+    most_recent_fit_identifier = fit_identifier;
+    setTimeout(function() {
+        // Only fit if we're the last one
+        if (fit_identifier !== most_recent_fit_identifier) return;
+
         // Fit the view to the network
         network.fit({
             animation: {
@@ -243,7 +247,7 @@ function delayed_fit() {
                 easingFunction: 'easeInOutQuad'
             }
         });
-    }, 50);
+    }, 250);
 }
 
 function add_ticket(ticket_id) {
