@@ -49,6 +49,7 @@ DONE:
 * Check links don't exist already before adding them
 * Fit the view when adding nodes/edges so everything is onscreen
 * Improve layout -  Work out why it's not always strictly hierarchical - Bad data (cycles!)
+* Improve layout - Make it always strictly hierarchical
 */
 
 
@@ -218,15 +219,67 @@ function _init_graph() {
             }
         }
     );
-    
+
     // Add change listeners
     nodes.on('*', function (event, properties, senderId) {
         // UPdate the node summary
         $('.jlv_summary').text(nodes.length+' issues');
-        
+
         // Wait a bit then fit the view to the nodes
         delayed_fit();
     });
+
+    // Override network layout
+    network.layoutEngine._determineLevelsDirected = _determineLevelsDirected_strict_override.bind(network.layoutEngine);
+}
+
+function _determineLevelsDirected_strict_override() {
+    // Initialise all node levels & fill the connected_nodes cache
+    var nodeIds = Object.keys(network.body.nodes),
+        connected_nodes = {};
+    nodeIds.forEach(function(nodeId) {
+        var has_connections = false;
+        connected_nodes[nodeId] = [];
+        network.getConnectedEdges(nodeId).forEach(function(edgeId) {
+            var edge = edges.get(edgeId);
+            // Check the edge is a forward connection
+            if (edge.from == nodeId && edge.type == 'Blocks') {
+                has_connections = true;
+                connected_nodes[nodeId].push(edge.to);
+            }
+        });
+
+        // If this node is not connected to anything, put it on row 0
+        // Otherwise, start on row 1
+        if (has_connections) {
+            // This node has children; start it on level 1
+            network.layoutEngine.hierarchicalLevels[nodeId] = 1;
+        } else {
+            // This node has no children; start it on level 0
+            network.layoutEngine.hierarchicalLevels[nodeId] = 0;
+            // Also, reset x so they aren't wierdly spread out
+            network.body.nodes[nodeId].x = undefined;
+        }
+    });
+
+    // Iterate over the nodes, pushing them lower if necessary
+    // If the graph is cyclic, this will fail horribly (and keep pushing the nodes lower & lower)
+    // Therefore, stop if we're still changing the graph after <number of nodes> iterations
+    for (var iteration=0; iteration<nodeIds.length; iteration++) {
+        var changed = false;
+        nodeIds.forEach(function(nodeId) {
+            var node_level = network.layoutEngine.hierarchicalLevels[nodeId];
+            connected_nodes[nodeId].forEach(function(connected_nodeId) {
+                var connected_level = network.layoutEngine.hierarchicalLevels[connected_nodeId];
+                if (connected_level <= node_level) {
+                    network.layoutEngine.hierarchicalLevels[connected_nodeId] = node_level + 1;
+                    changed = true;
+                }
+            });
+        });
+        // If no nodes were moved, we can stop now
+        if (!changed) break;
+    }
 }
 
 var most_recent_fit_identifier;
@@ -260,7 +313,7 @@ function add_ticket(ticket_id) {
             shape: 'box'
         });
         network.redraw();
-        
+
         // Load ticket information
         var ticket_url = window.location.origin + '/rest/api/2/issue/' + ticket_id + '?fields=issuelinks,issuetype,status,summary';
         $.ajax(
@@ -307,28 +360,28 @@ function add_ticket_info(ticket_id, summary, type, status, links) {
 
     // Add related tickets & links
     links.forEach(function(link) {
-        add_ticket(link['from']);
-        add_ticket(link['to']);
-        
-        var link_id = link['from']+'::'+link['to']+'::'+link['type'];
+        add_ticket(link.from);
+        add_ticket(link.to);
+
+        var link_id = link.from+'::'+link.to+'::'+link.type;
         if (edges.get(link_id) === null) {
             // Show edges differently
-            if (link['type'] == 'Blocks') {
-                edges.add({
-                    id: link_id,
-                    from: link['from'],
-                    to: link['to'],
-                    arrows: 'to'
-                });
-            } else if (link['type'] == 'Relates') {
-                edges.add({
-                    id: link_id,
-                    from: link['from'],
-                    to: link['to'],
-                    dashes: true
-                });
+            var edge_options = {
+                id: link_id,
+                from: link.from,
+                to: link.to,
+                type: link.type
+            };
+            if (link.type == 'Blocks') {
+                edge_options.arrows = 'to';
+            } else if (link.type == 'Relates') {
+                edge_options.dashes = true;
             }else {
                 console.log('Ignored link', link);
+                edge_options = null;
+            }
+            if (edge_options) {
+                edges.add(edge_options);
             }
         }
     });
@@ -364,7 +417,7 @@ function main() {
     $('<span class="jlv_open jlv_button">JLV</span>')
         .click(open_jlv_for_issue_links)
         .appendTo('#linkingmodule_heading');
-    
+
     // Add the show button for epic
     $('<span class="jlv_open jlv_button">JLV</span>')
         .click(open_jlv_for_epic_tickets)
