@@ -17,7 +17,6 @@
 
 /*
 TODO:
-* Show JLV button after re-render (e.g. after editing links)
 * Improve layout:
   * See if there'a a way to layout without crossing lines
   * Don't leave unconnected components far away
@@ -54,6 +53,7 @@ DONE:
 * Improve layout -  Work out why it's not always strictly hierarchical - Bad data (cycles!)
 * Improve layout - Make it always strictly hierarchical
 * Auto update
+* Show JLV button after re-render (e.g. after editing links)
 */
 
 
@@ -416,15 +416,22 @@ function _show_page() {
     $('#page').show();
 }
 
-function main() {
-    // Add the show button for links
-    $('<span class="jlv_open jlv_button">JLV</span>')
-        .click(open_jlv_for_issue_links)
-        .appendTo('#linkingmodule_heading');
+function add_buttons() {
+    if ($('.jlv_open').length == 0) {
+        // Add the show button for links
+        $('<span class="jlv_open jlv_button">JLV</span>')
+            .click(open_jlv_for_issue_links)
+            .appendTo('#linkingmodule_heading');
 
-    // Add the show button for epic
-    $('<span class="jlv_open jlv_button">JLV</span>')
-        .click(open_jlv_for_epic_tickets)
-        .appendTo('#greenhopper-epics-issue-web-panel_heading');
+        // Add the show button for epic
+        $('<span class="jlv_open jlv_button">JLV</span>')
+            .click(open_jlv_for_epic_tickets)
+            .appendTo('#greenhopper-epics-issue-web-panel_heading');
+    }
+}
+
+function main() {
+    add_buttons();
+    setInterval(add_buttons, 1000);
 }
 main();
