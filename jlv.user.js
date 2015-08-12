@@ -173,31 +173,21 @@ function _add_jlv(jlv_type) {
         title = jlv_type+' for '+ticket_id+': '+summary;
 
     // Add the container
-    $('<div class="jlv"><div class="jlv_graph"></div></div>')
-        .appendTo('body')
-    // Add the title
-    .append(
-        $('<span class="jlv_title">'+title+'</span>')
-    )
-    // Add the summary
-    .append(
-        $('<span class="jlv_summary"></span>')
-    )
-    // Add settings panel
-    .append(
-        $('<div class="jlv_settings"></span>')
-    )
-    // Add close button
-    .append(
-        $('<span class="jlv_close jlv_button">Close</span>')
-            .click(close_jlv)
-    )
-    // Add settings toggle
-    .append(
-        $('<span class="jlv_toggle_settings jlv_button">Settings</span>')
-            .click(toggle_settings)
-    )
-    ;
+    var html = [
+        '<div class="jlv">',
+            '<div class="jlv_graph"></div>',
+            '<span class="jlv_title">'+title+'</span>',
+            '<span class="jlv_summary"></span>',
+            '<div class="jlv_settings"></div>',
+            '<span class="jlv_close jlv_button">Close</span>',
+            '<span class="jlv_toggle_settings jlv_button">Settings</span>',
+        '</div>',
+    ''].join('\n');
+    $(html).appendTo('body')
+
+    // Bind all click handlers
+    $('.jlv_close').click(close_jlv);
+    $('.jlv_toggle_settings').click(toggle_settings);
 }
 
 function _init_graph() {
