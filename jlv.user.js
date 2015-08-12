@@ -3,11 +3,12 @@
 // @description Visualise Jira ticket links!
 // @author      Nicholas Lee
 // @namespace   http://github.com/csudcy/jlv/
-// @version     0.1.20150811
+// @version     0.1.20150812
 // @downloadURL https://raw.githubusercontent.com/csudcy/jlv/master/jlv.user.js
 // @updateURL   https://raw.githubusercontent.com/csudcy/jlv/master/jlv.meta.js
 // @match       https://*.atlassian.net/browse/*
 // @require     https://cdnjs.cloudflare.com/ajax/libs/jquery/2.1.1/jquery.min.js
+// @require     http://cdnjs.cloudflare.com/ajax/libs/handlebars.js/2.0.0/handlebars.min.js
 // @require     https://cdnjs.cloudflare.com/ajax/libs/vis/4.7.0/vis.min.js
 // @resource    visJS_CSS https://cdnjs.cloudflare.com/ajax/libs/vis/4.7.0/vis.min.css
 // @grant       GM_addStyle
@@ -17,14 +18,15 @@
 
 /*
 TODO:
+* Ticket summary panel on click
+  * Links to highlight blocks/blocked by tickets
+  * Links to open tickets
+* Show summary
+  * Number of tickets in each status
 * Improve layout:
   * See if there'a a way to layout without crossing lines
   * Don't leave unconnected components far away
   * Add re-layout button
-* Add hyperlinks to tickets
-* Ticket summary panel on click
-* Show summary
-  * Number of tickets in each status
 * Stop AJAX requests when JLV is closed
 * Group into epic rows
 * Group into Sprint columns
@@ -54,8 +56,13 @@ DONE:
 * Improve layout - Make it always strictly hierarchical
 * Auto update
 * Show JLV button after re-render (e.g. after editing links)
+* Ticket summary panel on click - Ticket name, blocks & blocked by
 */
 
+
+/********************************************\
+            CSS
+\********************************************/
 
 GM_addStyle(
     GM_getResourceText('visJS_CSS')
@@ -80,10 +87,31 @@ GM_addStyle([
         'width: 100%;',
     '}',
 
+    '.jlv_info {',
+        'position: absolute;',
+        'top: 0px;',
+        'bottom: 0px;',
+        'left: 0px;',
+        'width: 500px;',
+        'background-color: gray;',
+        'padding: 5px;',
+    '}',
+
+    '.jlv_header {',
+        'font-size: 1.4em;',
+        'font-weight: bold;',
+        'margin-bottom: 5px;',
+    '}',
+
+    '.jlv_ticket_summary {',
+        'font-size: 1.5em;',
+    '}',
+
     '.jlv_graph {',
         'position: absolute;',
         'height: 100%;',
-        'width: 100%;',
+        'left: 500px;',
+        'right: 0px;',
         'background-color: lightgray;',
     '}',
 
@@ -101,7 +129,7 @@ GM_addStyle([
     '.jlv_title {',
         'position: absolute;',
         'top: 0px;',
-        'left: 0px;',
+        'left: 520px;',
         'font-weight: bold;',
         'font-size: 2.0em;',
     '}',
@@ -109,7 +137,7 @@ GM_addStyle([
     '.jlv_summary {',
         'position: absolute;',
         'bottom: 0px;',
-        'left: 0px;',
+        'left: 520px;',
         'font-size: 1.5em;',
     '}',
 
@@ -125,6 +153,60 @@ GM_addStyle([
         'right: 5px;',
     '}',
 ''].join('\n'));
+
+/********************************************\
+            Templates
+\********************************************/
+
+var MAIN_TEMPLATE = Handlebars.compile([
+    '<div class="jlv">',
+        '<div class="jlv_info">{{{info_html}}}</div>',
+        '<div class="jlv_graph"></div>',
+        '<span class="jlv_title">{{title}}</span>',
+        '<span class="jlv_summary"></span>',
+        '<div class="jlv_settings"></div>',
+        '<span class="jlv_close jlv_button">Close</span>',
+        '<span class="jlv_toggle_settings jlv_button">Settings</span>',
+    '</div>',
+''].join('\n'));
+
+var INFO_TEMPLATE = Handlebars.compile([
+    '<div class="jlv_ticket_summary jlv_header">',
+        '{{#if ticket}}',
+            '{{ticket.summary}}',
+        '{{else}}',
+            'Select A Ticket',
+        '{{/if}}',
+    '</div>',
+    '<div class="jlv_blocked_by jlv_header">Blocked By</div>',
+    '<div class="jlv_blocked_by_tickets">',
+        '{{#if blocked_by}}',
+            '<ul>',
+                '{{#each blocked_by}}',
+                    '<li>{{this.summary}}</li>',
+                '{{/each}}',
+            '</ul>',
+        '{{else}}',
+            '-',
+        '{{/if}}',
+    '</div>',
+    '<div class="jlv_blocks jlv_header">Blocks</div>',
+    '<div class="jlv_blocks_tickets">',
+        '{{#if blocks}}',
+            '<ul>',
+                '{{#each blocks}}',
+                    '<li>{{this.summary}}</li>',
+                '{{/each}}',
+            '</ul>',
+        '{{else}}',
+            '-',
+        '{{/if}}',
+    '</div>',
+''].join('\n'));
+
+/********************************************\
+            Globals
+\********************************************/
 
 var nodes,
     edges,
@@ -173,17 +255,12 @@ function _add_jlv(jlv_type) {
         title = jlv_type+' for '+ticket_id+': '+summary;
 
     // Add the container
-    var html = [
-        '<div class="jlv">',
-            '<div class="jlv_graph"></div>',
-            '<span class="jlv_title">'+title+'</span>',
-            '<span class="jlv_summary"></span>',
-            '<div class="jlv_settings"></div>',
-            '<span class="jlv_close jlv_button">Close</span>',
-            '<span class="jlv_toggle_settings jlv_button">Settings</span>',
-        '</div>',
-    ''].join('\n');
-    $(html).appendTo('body')
+    $(
+        MAIN_TEMPLATE({
+            title: title,
+            info_html: INFO_TEMPLATE()
+        })
+    ).appendTo('body')
 
     // Bind all click handlers
     $('.jlv_close').click(close_jlv);
@@ -213,6 +290,37 @@ function _init_graph() {
             }
         }
     );
+
+    // Add select listener
+    network.on('selectNode', function(e) {
+        var args = {};
+        if (e.nodes.length === 1) {
+            // Show the ticket summary
+            var node = nodes.get(e.nodes[0]),
+                blocks = [],
+                blocked_by = [];
+
+            network.getConnectedEdges(node.id).forEach(function(edgeId) {
+                var edge = edges.get(edgeId);
+                // Check the edge is a forward connection
+                if (edge.type == 'Blocks') {
+                    if (edge.from == node.id) {
+                        blocks.push(nodes.get(edge.to));
+                    } else {
+                        blocked_by.push(nodes.get(edge.from));
+                    }
+                }
+            });
+
+            args = {
+                ticket: node,
+                blocks: blocks,
+                blocked_by: blocked_by
+            };
+        }
+        console.log(args);
+        $('.jlv_info').html(INFO_TEMPLATE(args));
+    });
 
     // Add change listeners
     nodes.on('*', function (event, properties, senderId) {
@@ -304,6 +412,7 @@ function add_ticket(ticket_id) {
             id: ticket_id,
             label: ticket_id,
             title: 'Loading...',
+            summary: 'Loading...',
             shape: 'box'
         });
         network.redraw();
@@ -348,6 +457,9 @@ function add_ticket_info(ticket_id, summary, type, status, links) {
     nodes.update({
         id: ticket_id,
         title: ticket_id+': '+summary+' ('+type+', '+status+')',
+        summary: summary,
+        type: type,
+        status: status,
         shape: 'ellipse',
         color: STATUS_COLOURS[status] || 'black'
     });
