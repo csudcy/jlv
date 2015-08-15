@@ -171,37 +171,27 @@ var MAIN_TEMPLATE = Handlebars.compile([
 ''].join('\n'));
 
 var INFO_TEMPLATE = Handlebars.compile([
-    '<div class="jlv_ticket_summary jlv_header">',
-        '{{#if ticket}}',
+    '{{#if ticket}}',
+        '<div class="jlv_ticket_summary jlv_header" title="{{ticket.summary}}">',
             '{{ticket.summary}}',
-        '{{else}}',
+        '</div>',
+        
+        
+        '{{#each link_groups}}',
+            '<div class="jlv_header">{{this.link_type}}</div>',
+            '<div class="jlv_tickets">',
+                '<ul>',
+                    '{{#each this.links}}',
+                        '<li>{{this.summary}}</li>',
+                    '{{/each}}',
+                '</ul>',
+            '</div>',
+        '{{/each}}',
+    '{{else}}',
+        '<div class="jlv_ticket_summary jlv_header">',
             'Select A Ticket',
-        '{{/if}}',
-    '</div>',
-    '<div class="jlv_blocked_by jlv_header">Blocked By</div>',
-    '<div class="jlv_blocked_by_tickets">',
-        '{{#if blocked_by}}',
-            '<ul>',
-                '{{#each blocked_by}}',
-                    '<li>{{this.summary}}</li>',
-                '{{/each}}',
-            '</ul>',
-        '{{else}}',
-            '-',
-        '{{/if}}',
-    '</div>',
-    '<div class="jlv_blocks jlv_header">Blocks</div>',
-    '<div class="jlv_blocks_tickets">',
-        '{{#if blocks}}',
-            '<ul>',
-                '{{#each blocks}}',
-                    '<li>{{this.summary}}</li>',
-                '{{/each}}',
-            '</ul>',
-        '{{else}}',
-            '-',
-        '{{/if}}',
-    '</div>',
+        '</div>',
+    '{{/if}}',
 ''].join('\n'));
 
 /********************************************\
@@ -297,28 +287,47 @@ function _init_graph() {
         if (e.nodes.length === 1) {
             // Show the ticket summary
             var node = nodes.get(e.nodes[0]),
-                blocks = [],
-                blocked_by = [];
+                link_groups = {},
+                link_type,
+                link_to;
 
             network.getConnectedEdges(node.id).forEach(function(edgeId) {
                 var edge = edges.get(edgeId);
                 // Check the edge is a forward connection
                 if (edge.type == 'Blocks') {
                     if (edge.from == node.id) {
-                        blocks.push(nodes.get(edge.to));
+                        link_type = 'Blocks';
+                        link_to = edge.to;
                     } else {
-                        blocked_by.push(nodes.get(edge.from));
+                        link_type = 'Blocked by';
+                        link_to = edge.from;
                     }
                 }
+
+                if (link_groups[link_type] === undefined) {
+                    link_groups[link_type] = {
+                        link_type: link_type,
+                        links: []
+                    };
+                }
+                link_groups[link_type].links.push(nodes.get(edge.to));
+            });
+            
+            // Sort the link type keys
+            var sorted_link_groups = [];
+            Object.keys(link_groups).sort().forEach(function(link_type) {
+                var link_group = link_groups[link_type];
+                link_group.links.sort(function(a, b) {
+                    return a.id < b.id;
+                });
+                sorted_link_groups.push(link_group);
             });
 
             args = {
                 ticket: node,
-                blocks: blocks,
-                blocked_by: blocked_by
+                link_groups: sorted_link_groups
             };
         }
-        console.log(args);
         $('.jlv_info').html(INFO_TEMPLATE(args));
     });
 
