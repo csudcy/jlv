@@ -3,7 +3,7 @@
 // @description Visualise Jira ticket links!
 // @author      Nicholas Lee
 // @namespace   http://github.com/csudcy/jlv/
-// @version     0.1.20150812
+// @version     0.1.20150815
 // @downloadURL https://raw.githubusercontent.com/csudcy/jlv/master/jlv.user.js
 // @updateURL   https://raw.githubusercontent.com/csudcy/jlv/master/jlv.meta.js
 // @match       https://*.atlassian.net/browse/*
@@ -18,9 +18,6 @@
 
 /*
 TODO:
-* Ticket summary panel on click
-  * Links to highlight blocks/blocked by tickets
-  * Links to open tickets
 * Show summary
   * Number of tickets in each status
 * Improve layout:
@@ -56,7 +53,10 @@ DONE:
 * Improve layout - Make it always strictly hierarchical
 * Auto update
 * Show JLV button after re-render (e.g. after editing links)
-* Ticket summary panel on click - Ticket name, blocks & blocked by
+* Ticket summary panel on click
+  * Ticket name, blocks & blocked by
+  * Links to highlight blocks/blocked by tickets
+  * Links to open tickets
 */
 
 
@@ -81,6 +81,18 @@ GM_addStyle([
         '-webkit-user-select: none;',
     '}',
 
+    '.jlv_lesser_button {',
+        'margin-left: 5px;',
+        'font-weight: bold;',
+        'font-size: 12px;',
+        'background-color: darkmagenta;',
+        'padding: 4px;',
+        'border-radius: 5px;',
+        'color: whitesmoke;',
+        'cursor: cell;',
+        '-webkit-user-select: none;',
+    '}',
+
     '.jlv {',
         'position: absolute;',
         'height: 100%;',
@@ -93,8 +105,9 @@ GM_addStyle([
         'bottom: 0px;',
         'left: 0px;',
         'width: 500px;',
-        'background-color: gray;',
+        'background-color: whitesmoke;',
         'padding: 5px;',
+        'overflow-y: auto;',
     '}',
 
     '.jlv_header {',
@@ -105,6 +118,30 @@ GM_addStyle([
 
     '.jlv_ticket_summary {',
         'font-size: 1.5em;',
+        'white-space: nowrap;',
+    '}',
+
+    '.jlv_tickets table {',
+        'width: 100%;',
+        'padding-right: 5px;',
+    '}',
+
+    '.jlv_highlight_cell {',
+        'white-space: nowrap;',
+        'text-align: right;',
+        'width: 55px;',
+    '}',
+
+    '.jlv_external_link {',
+        'padding-left: 13px;',
+        'color: darkblue;',
+        'background-position: center left;',
+        'background-repeat: no-repeat;',
+        'background-image: linear-gradient(transparent,transparent),url(data:image/svg+xml,%3C%3Fxml%20version%3D%221.0%22%20encoding%3D%22UTF-8%22%3F%3E%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2210%22%20height%3D%2210%22%3E%3Cg%20transform%3D%22translate%28-826.429%20-698.791%29%22%3E%3Crect%20width%3D%225.982%22%20height%3D%225.982%22%20x%3D%22826.929%22%20y%3D%22702.309%22%20fill%3D%22%23fff%22%20stroke%3D%22%2306c%22%2F%3E%3Cg%3E%3Cpath%20d%3D%22M831.194%20698.791h5.234v5.391l-1.571%201.545-1.31-1.31-2.725%202.725-2.689-2.689%202.808-2.808-1.311-1.311z%22%20fill%3D%22%2306f%22%2F%3E%3Cpath%20d%3D%22M835.424%20699.795l.022%204.885-1.817-1.817-2.881%202.881-1.228-1.228%202.881-2.881-1.851-1.851z%22%20fill%3D%22%23fff%22%2F%3E%3C%2Fg%3E%3C%2Fg%3E%3C%2Fsvg%3E);',
+    '}',
+
+    '.external_link:hover {',
+        'color: darkblue;',
     '}',
 
     '.jlv_graph {',
@@ -124,14 +161,6 @@ GM_addStyle([
         'display: none;',
         'overflow-y: auto;',
         'overflow-x: hidden;',
-    '}',
-
-    '.jlv_title {',
-        'position: absolute;',
-        'top: 0px;',
-        'left: 520px;',
-        'font-weight: bold;',
-        'font-size: 2.0em;',
     '}',
 
     '.jlv_summary {',
@@ -162,7 +191,6 @@ var MAIN_TEMPLATE = Handlebars.compile([
     '<div class="jlv">',
         '<div class="jlv_info">{{{info_html}}}</div>',
         '<div class="jlv_graph"></div>',
-        '<span class="jlv_title">{{title}}</span>',
         '<span class="jlv_summary"></span>',
         '<div class="jlv_settings"></div>',
         '<span class="jlv_close jlv_button">Close</span>',
@@ -172,19 +200,28 @@ var MAIN_TEMPLATE = Handlebars.compile([
 
 var INFO_TEMPLATE = Handlebars.compile([
     '{{#if ticket}}',
-        '<div class="jlv_ticket_summary jlv_header" title="{{ticket.summary}}">',
-            '{{ticket.summary}}',
+        '<div class="jlv_ticket_summary jlv_header">',
+            '<a href="{{ticket.url}}" title="{{ticket.id}}: {{ticket.summary}}" class="jlv_external_link" target="about:blank">',
+                '{{ticket.id}}: {{ticket.summary}}',
+            '</a>',
         '</div>',
-        
-        
         '{{#each link_groups}}',
             '<div class="jlv_header">{{this.link_type}}</div>',
             '<div class="jlv_tickets">',
-                '<ul>',
+                '<table>',
                     '{{#each this.links}}',
-                        '<li>{{this.summary}}</li>',
+                        '<tr>',
+                            '<td>',
+                                '<a href="{{this.url}}" title="{{ticket.id}}: {{ticket.summary}}" class="jlv_ticket jlv_external_link" target="about:blank">',
+                                    '{{this.id}}: {{this.summary}}',
+                                '</a>',
+                            '</td>',
+                            '<td class="jlv_highlight_cell">',
+                                '<span class="jlv_highlight jlv_lesser_button" data-ticket="{{this.id}}">Show &#10140;</a>',
+                            '</td>',
+                        '</tr>',
                     '{{/each}}',
-                '</ul>',
+                '</table>',
             '</div>',
         '{{/each}}',
     '{{else}}',
@@ -216,9 +253,8 @@ function open_jlv_for_issue_links() {
     _init_graph();
 
     // Add current ticket
-    add_ticket(
-        $('#key-val').data('issue-key')
-    );
+    var ticket_id = $('#key-val').data('issue-key');
+    add_ticket(ticket_id);
 }
 
 function open_jlv_for_epic_tickets() {
@@ -232,7 +268,7 @@ function open_jlv_for_epic_tickets() {
         add_ticket(
             $(epic_ticket_tr).data('issuekey')
         );
-    })
+    });
 }
 
 function _hide_page() {
@@ -240,17 +276,12 @@ function _hide_page() {
 }
 
 function _add_jlv(jlv_type) {
-    var ticket_id = $('#key-val').data('issue-key'),
-        summary = $('#summary-val').text(),
-        title = jlv_type+' for '+ticket_id+': '+summary;
-
     // Add the container
     $(
         MAIN_TEMPLATE({
-            title: title,
             info_html: INFO_TEMPLATE()
         })
-    ).appendTo('body')
+    ).appendTo('body');
 
     // Bind all click handlers
     $('.jlv_close').click(close_jlv);
@@ -283,52 +314,14 @@ function _init_graph() {
 
     // Add select listener
     network.on('selectNode', function(e) {
-        var args = {};
         if (e.nodes.length === 1) {
-            // Show the ticket summary
-            var node = nodes.get(e.nodes[0]),
-                link_groups = {},
-                link_type,
-                link_to;
-
-            network.getConnectedEdges(node.id).forEach(function(edgeId) {
-                var edge = edges.get(edgeId);
-                // Check the edge is a forward connection
-                if (edge.type == 'Blocks') {
-                    if (edge.from == node.id) {
-                        link_type = 'Blocks';
-                        link_to = edge.to;
-                    } else {
-                        link_type = 'Blocked by';
-                        link_to = edge.from;
-                    }
-                }
-
-                if (link_groups[link_type] === undefined) {
-                    link_groups[link_type] = {
-                        link_type: link_type,
-                        links: []
-                    };
-                }
-                link_groups[link_type].links.push(nodes.get(edge.to));
-            });
-            
-            // Sort the link type keys
-            var sorted_link_groups = [];
-            Object.keys(link_groups).sort().forEach(function(link_type) {
-                var link_group = link_groups[link_type];
-                link_group.links.sort(function(a, b) {
-                    return a.id < b.id;
-                });
-                sorted_link_groups.push(link_group);
-            });
-
-            args = {
-                ticket: node,
-                link_groups: sorted_link_groups
-            };
+            highlight_ticket(e.nodes[0]);
+        } else {
+            highlight_ticket();
         }
-        $('.jlv_info').html(INFO_TEMPLATE(args));
+    });
+    network.on('deselectNode', function(e) {
+        highlight_ticket();
     });
 
     // Add change listeners
@@ -339,6 +332,16 @@ function _init_graph() {
         // Wait a bit then fit the view to the nodes
         delayed_fit();
     });
+
+    // Add `show` listener
+    $(document).on(
+        'click',
+        '.jlv_highlight',
+        function(e) {
+            var ticket_id = $(e.toElement).data('ticket');
+            highlight_ticket(ticket_id);
+        }
+    );
 
     // Override network layout
     network.layoutEngine._determineLevelsDirected = _determineLevelsDirected_strict_override.bind(network.layoutEngine);
@@ -393,6 +396,66 @@ function _determineLevelsDirected_strict_override() {
     }
 }
 
+function highlight_ticket(ticket_id) {
+    var args = {};
+    if (ticket_id) {
+        // Make sure this one is actually selected
+        network.selectNodes([ticket_id]);
+
+        // Show the ticket summary
+        var node = nodes.get(ticket_id),
+            link_groups = {},
+            link_type,
+            link_to;
+
+        network.getConnectedEdges(node.id).forEach(function(edgeId) {
+            var edge = edges.get(edgeId);
+            // Check the edge is a forward connection
+            if (edge.type == 'Blocks') {
+                if (edge.from == node.id) {
+                    link_type = 'Blocks';
+                    link_to = edge.to;
+                } else {
+                    link_type = 'Blocked by';
+                    link_to = edge.from;
+                }
+            } else {
+                if (edge.from == node.id) {
+                    link_type = edge.type;
+                    link_to = edge.to;
+                } else {
+                    link_type = edge.type+' (Reverse)';
+                    link_to = edge.from;
+                }
+            }
+
+            if (link_groups[link_type] === undefined) {
+                link_groups[link_type] = {
+                    link_type: link_type,
+                    links: []
+                };
+            }
+            link_groups[link_type].links.push(nodes.get(link_to));
+        });
+        
+        // Sort the link type keys
+        var sorted_link_groups = [];
+        Object.keys(link_groups).sort().forEach(function(link_type) {
+            var link_group = link_groups[link_type];
+            link_group.links.sort(function(a, b) {
+                return a.id < b.id;
+            });
+            sorted_link_groups.push(link_group);
+        });
+
+        args = {
+            ticket: node,
+            link_groups: sorted_link_groups
+        };
+    }
+    $('.jlv_info').html(INFO_TEMPLATE(args));
+}
+
 var most_recent_fit_identifier;
 function delayed_fit() {
     // It seems setTimeout in GM doesn't return a reference to it
@@ -427,13 +490,15 @@ function add_ticket(ticket_id) {
         network.redraw();
 
         // Load ticket information
-        var ticket_url = window.location.origin + '/rest/api/2/issue/' + ticket_id + '?fields=issuelinks,issuetype,status,summary';
+        var rest_url = window.location.origin + '/rest/api/2/issue/' + ticket_id + '?fields=issuelinks,issuetype,status,summary';
         $.ajax(
-            ticket_url,
+            rest_url,
             {
                 success: function(data, textStatus, jqXHR) {
+                    var ticket_url = window.location.origin + '/browse/' + ticket_id;
                     add_ticket_info(
                         ticket_id,
+                        ticket_url,
                         data.fields.summary,
                         data.fields.issuetype.name,
                         data.fields.status.name,
@@ -461,10 +526,11 @@ function add_ticket(ticket_id) {
     }
 }
 
-function add_ticket_info(ticket_id, summary, type, status, links) {
+function add_ticket_info(ticket_id, url, summary, type, status, links) {
     // Update node details
     nodes.update({
         id: ticket_id,
+        url: url,
         title: ticket_id+': '+summary+' ('+type+', '+status+')',
         summary: summary,
         type: type,
@@ -528,7 +594,7 @@ function _show_page() {
 }
 
 function add_buttons() {
-    if ($('.jlv_open').length == 0) {
+    if ($('.jlv_open').length === 0) {
         // Add the show button for links
         $('<span class="jlv_open jlv_button">JLV</span>')
             .click(open_jlv_for_issue_links)
