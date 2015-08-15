@@ -3,7 +3,7 @@
 // @description Visualise Jira ticket links!
 // @author      Nicholas Lee
 // @namespace   http://github.com/csudcy/jlv/
-// @version     0.1.20150812
+// @version     0.1.20150815
 // @downloadURL https://raw.githubusercontent.com/csudcy/jlv/master/jlv.user.js
 // @updateURL   https://raw.githubusercontent.com/csudcy/jlv/master/jlv.meta.js
 // @match       https://*.atlassian.net/browse/*
